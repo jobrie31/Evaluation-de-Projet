@@ -12,17 +12,18 @@ import { db } from "./firebase";
 const CATEGORIES = ["Alimentaire", "Commercial", "Industriel", "Publique"];
 
 const BUDGET_BRACKETS = [
-  { id: "0-5k", label: "0 à 5k $", min: 0, max: 5000 },
-  { id: "5k-20k", label: "5k à 20k $", min: 5000, max: 20000 },
-  { id: "20k-50k", label: "20k à 50k $", min: 20000, max: 50000 },
-  { id: "50k-100k", label: "50k à 100k $", min: 50000, max: 100000 },
-  { id: "100k-plus", label: "100k $ et plus", min: 100000, max: null },
+  { id: "0-5k", label: "0 à 5 000 pi²", min: 0, max: 5000 },
+  { id: "5k-20k", label: "5 000 à 20 000 pi²", min: 5000, max: 20000 },
+  { id: "20k-50k", label: "20 000 à 50 000 pi²", min: 20000, max: 50000 },
+  { id: "50k-100k", label: "50 000 à 100 000 pi²", min: 50000, max: 100000 },
+  { id: "100k-plus", label: "100 000 pi² et plus", min: 100000, max: null },
 ];
 
 const EMPTY_PROJECT = {
   nomProjet: "",
   categorie: "",
   description: "",
+  superficie: "", // en pi²
 
   mouluresSoumis: "",
   mouluresPaye: "",
@@ -37,6 +38,10 @@ const EMPTY_PROJECT = {
 function toNumber(v) {
   const n = parseFloat(v);
   return isNaN(n) ? 0 : n;
+}
+
+function getSuperficie(project) {
+  return toNumber(project.superficie);
 }
 
 function getTotalSoumission(project) {
@@ -57,20 +62,34 @@ function getTotalPaye(project) {
   );
 }
 
-// Gain = Soumission - Payé (si on paie moins que la soumission, c’est positif)
+// Build résumé en $/pi²
 function buildSummaryForList(projects, categorieLabel = null) {
   if (!projects.length) return null;
 
-  const totalSoumis = projects.reduce(
+  const totalArea = projects.reduce(
+    (sum, p) => sum + getSuperficie(p),
+    0
+  );
+
+  const totalSoumisMoney = projects.reduce(
     (sum, p) => sum + getTotalSoumission(p),
     0
   );
-  const totalPaye = projects.reduce((sum, p) => sum + getTotalPaye(p), 0);
+  const totalPayeMoney = projects.reduce(
+    (sum, p) => sum + getTotalPaye(p),
+    0
+  );
+
+  // Conversion en $/pi² si superficie > 0
+  const totalSoumis =
+    totalArea > 0 ? totalSoumisMoney / totalArea : 0;
+  const totalPaye =
+    totalArea > 0 ? totalPayeMoney / totalArea : 0;
 
   const diff = totalSoumis - totalPaye;
   const pct = totalSoumis > 0 ? (diff / totalSoumis) * 100 : null;
 
-  const sumField = (field) =>
+  const sumFieldMoney = (field) =>
     projects.reduce((sum, p) => sum + toNumber(p[field]), 0);
 
   const areas = [
@@ -101,9 +120,15 @@ function buildSummaryForList(projects, categorieLabel = null) {
   ];
 
   const areaSummaries = areas.map((a) => {
-    const soumis = sumField(a.soumisField);
-    const paye = sumField(a.payeField);
-    const adiff = soumis - paye;
+    const soumisMoney = sumFieldMoney(a.soumisField);
+    const payeMoney = sumFieldMoney(a.payeField);
+
+    const soumis =
+      totalArea > 0 ? soumisMoney / totalArea : 0; // $/pi²
+    const paye =
+      totalArea > 0 ? payeMoney / totalArea : 0; // $/pi²
+
+    const adiff = soumis - paye; // $/pi²
     const apct = soumis > 0 ? (adiff / soumis) * 100 : null;
 
     return {
@@ -119,9 +144,10 @@ function buildSummaryForList(projects, categorieLabel = null) {
   return {
     categorie: categorieLabel,
     count: projects.length,
-    totalSoumis,
-    totalPaye,
-    diff,
+    totalArea,
+    totalSoumis, // $/pi²
+    totalPaye, // $/pi²
+    diff, // $/pi²
     pct,
     areaSummaries,
   };
@@ -191,19 +217,19 @@ function App() {
     await deleteDoc(doc(db, "projets", id));
   };
 
-  // Filtrage
+  // Filtrage (par catégorie + par SUPERFICIE)
   const visibleProjects = projects.filter((p) => {
     if (selectedCategory && p.categorie !== selectedCategory) return false;
 
     if (selectedBracketId) {
-      const total = getTotalSoumission(p);
+      const area = getSuperficie(p);
       const b = BUDGET_BRACKETS.find((x) => x.id === selectedBracketId);
       if (!b) return true;
 
       if (b.max == null) {
-        if (total < b.min) return false;
+        if (area < b.min) return false;
       } else {
-        if (total < b.min || total >= b.max) return false;
+        if (area < b.min || area >= b.max) return false;
       }
     }
 
@@ -211,10 +237,9 @@ function App() {
   });
 
   const activeCategoryLabel = selectedCategory || "Toutes";
-  const activeBracketLabel =
-    selectedBracketId
-      ? BUDGET_BRACKETS.find((b) => b.id === selectedBracketId)?.label
-      : "Toutes";
+  const activeBracketLabel = selectedBracketId
+    ? BUDGET_BRACKETS.find((b) => b.id === selectedBracketId)?.label
+    : "Toutes";
 
   const hasFilters = selectedCategory || selectedBracketId;
   const isOnlyBracketFilter = !!selectedBracketId && !selectedCategory;
@@ -228,10 +253,10 @@ function App() {
     // Aucun filtre -> résumé global de tous les projets
     globalSummary = buildSummaryForList(visibleProjects, null);
   } else if (isOnlyBracketFilter) {
-    // seulement une tranche d'argent -> 1 résumé global
+    // seulement une tranche de superficie -> 1 résumé global
     globalSummary = buildSummaryForList(visibleProjects, null);
   } else {
-    // pas de tranche seule : catégorie choisie (avec ou sans budget) -> par catégorie
+    // catégorie choisie (avec ou sans tranche de superficie) -> par catégorie
     categorySummaries = CATEGORIES.map((cat) => {
       const list = visibleProjects.filter((p) => p.categorie === cat);
       return buildSummaryForList(list, cat);
@@ -253,10 +278,10 @@ function App() {
         maximumFractionDigits: 1,
       });
       const diffAbs = Math.abs(a.diff).toLocaleString("fr-CA", {
-        maximumFractionDigits: 0,
+        maximumFractionDigits: 2,
       });
       const labelBase = a.pct >= 0 ? "Gain" : "Perte";
-      pctText = `${labelBase} : ${pctAbs} % (${diffAbs} $)`;
+      pctText = `${labelBase} : ${pctAbs} % (${diffAbs} $/pi²)`;
     }
 
     return (
@@ -266,15 +291,15 @@ function App() {
         </div>
 
         <div className="summary-area-body">
-          {/* Histogramme vertical Soumission / Payé */}
+          {/* Histogramme vertical Soumission / Payé en $/pi² */}
           <div className="summary-hist">
             {/* Soumission */}
             <div className="summary-bar-vertical">
               <span className="summary-bar-vertical-value">
                 {a.soumis.toLocaleString("fr-CA", {
-                  maximumFractionDigits: 0,
+                  maximumFractionDigits: 2,
                 })}{" "}
-                $
+                $/pi²
               </span>
               <div className="summary-bar-vertical-track">
                 <div
@@ -289,9 +314,9 @@ function App() {
             <div className="summary-bar-vertical">
               <span className="summary-bar-vertical-value">
                 {a.paye.toLocaleString("fr-CA", {
-                  maximumFractionDigits: 0,
+                  maximumFractionDigits: 2,
                 })}{" "}
-                $
+                $/pi²
               </span>
               <div className="summary-bar-vertical-track">
                 <div
@@ -357,7 +382,7 @@ function App() {
             Catégorie : <strong>{activeCategoryLabel}</strong>
           </span>
           <span>
-            Budget : <strong>{activeBracketLabel}</strong>
+            Superficie : <strong>{activeBracketLabel}</strong>
           </span>
           {hasFilters && (
             <button
@@ -371,7 +396,7 @@ function App() {
         </div>
       </section>
 
-      {/* Résumé global (aucun filtre OU seulement tranche d’argent) */}
+      {/* Résumé global (aucun filtre OU seulement tranche de superficie) */}
       {(isNoFilter || isOnlyBracketFilter) && globalSummary && (
         <section className="summary-wrapper">
           <div className="summary-card">
@@ -386,25 +411,34 @@ function App() {
                 Projets : <strong>{globalSummary.count}</strong>
               </span>
               <span>
-                Soumission :{" "}
+                Superficie totale :{" "}
+                <strong>
+                  {globalSummary.totalArea.toLocaleString("fr-CA", {
+                    maximumFractionDigits: 0,
+                  })}{" "}
+                  pi²
+                </strong>
+              </span>
+              <span>
+                Soumission moyenne :{" "}
                 <strong>
                   {globalSummary.totalSoumis.toLocaleString("fr-CA", {
-                    maximumFractionDigits: 0,
+                    maximumFractionDigits: 2,
                   })}{" "}
-                  $
+                  $/pi²
                 </strong>
               </span>
               <span>
-                Payé :{" "}
+                Payé moyen :{" "}
                 <strong>
                   {globalSummary.totalPaye.toLocaleString("fr-CA", {
-                    maximumFractionDigits: 0,
+                    maximumFractionDigits: 2,
                   })}{" "}
-                  $
+                  $/pi²
                 </strong>
               </span>
               <span>
-                Gain / perte :{" "}
+                Gain / perte moyen :{" "}
                 <strong
                   className={
                     globalSummary.diff >= 0
@@ -413,9 +447,9 @@ function App() {
                   }
                 >
                   {globalSummary.diff.toLocaleString("fr-CA", {
-                    maximumFractionDigits: 0,
+                    maximumFractionDigits: 2,
                   })}{" "}
-                  $
+                  $/pi²
                 </strong>
               </span>
               <span>
@@ -436,7 +470,7 @@ function App() {
               </span>
             </div>
 
-            <div className="summary-subtitle">Par type de coût</div>
+            <div className="summary-subtitle">Par type de coût (en $/pi²)</div>
             <div className="summary-subgrid">
               {globalSummary.areaSummaries.map((a) => renderArea(a))}
             </div>
@@ -456,34 +490,43 @@ function App() {
                   Projets : <strong>{s.count}</strong>
                 </span>
                 <span>
-                  Soumission :{" "}
+                  Superficie totale :{" "}
+                  <strong>
+                    {s.totalArea.toLocaleString("fr-CA", {
+                      maximumFractionDigits: 0,
+                    })}{" "}
+                    pi²
+                  </strong>
+                </span>
+                <span>
+                  Soumission moyenne :{" "}
                   <strong>
                     {s.totalSoumis.toLocaleString("fr-CA", {
-                      maximumFractionDigits: 0,
+                      maximumFractionDigits: 2,
                     })}{" "}
-                    $
+                    $/pi²
                   </strong>
                 </span>
                 <span>
-                  Payé :{" "}
+                  Payé moyen :{" "}
                   <strong>
                     {s.totalPaye.toLocaleString("fr-CA", {
-                      maximumFractionDigits: 0,
+                      maximumFractionDigits: 2,
                     })}{" "}
-                    $
+                    $/pi²
                   </strong>
                 </span>
                 <span>
-                  Gain / perte :{" "}
+                  Gain / perte moyen :{" "}
                   <strong
                     className={
                       s.diff >= 0 ? "summary-positive" : "summary-negative"
                     }
                   >
                     {s.diff.toLocaleString("fr-CA", {
-                      maximumFractionDigits: 0,
+                      maximumFractionDigits: 2,
                     })}{" "}
-                    $
+                    $/pi²
                   </strong>
                 </span>
                 <span>
@@ -504,7 +547,9 @@ function App() {
                 </span>
               </div>
 
-              <div className="summary-subtitle">Par type de coût</div>
+              <div className="summary-subtitle">
+                Par type de coût (en $/pi²)
+              </div>
               <div className="summary-subgrid">
                 {s.areaSummaries.map((a) => renderArea(a))}
               </div>
@@ -552,6 +597,19 @@ function App() {
                 </label>
 
                 <label>
+                  Superficie (pi²)
+                  <input
+                    type="number"
+                    name="superficie"
+                    value={newProject.superficie}
+                    onChange={handleChange}
+                    min="0"
+                    step="1"
+                    required
+                  />
+                </label>
+
+                <label>
                   Notes / Description
                   <textarea
                     name="description"
@@ -563,7 +621,7 @@ function App() {
               </div>
 
               <div className="form-section">
-                <h3>Prix détaillés par catégorie</h3>
+                <h3>Budget total par catégorie (en $)</h3>
 
                 <div className="price-grid">
                   <div className="price-grid-header" />
@@ -664,7 +722,11 @@ function App() {
         ) : (
           <ul>
             {visibleProjects.map((p) => {
-              const total = getTotalSoumission(p);
+              const totalSoumis = getTotalSoumission(p);
+              const superficie = getSuperficie(p);
+              const totalParPi2 =
+                superficie > 0 ? totalSoumis / superficie : 0;
+
               return (
                 <li key={p.id}>
                   <div className="project-main">
@@ -685,11 +747,18 @@ function App() {
                   </div>
                   <div className="project-sub">
                     <span>
-                      Total soumis :{" "}
-                      {total.toLocaleString("fr-CA", {
+                      Superficie :{" "}
+                      {superficie.toLocaleString("fr-CA", {
                         maximumFractionDigits: 0,
                       })}{" "}
-                      $
+                      pi²
+                    </span>
+                    <span>
+                      Total soumis :{" "}
+                      {totalParPi2.toLocaleString("fr-CA", {
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      $/pi²
                     </span>
                     <button
                       type="button"

@@ -1,7 +1,7 @@
 // src/firebase.js
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-// (analytics pas obligatoire, donc on le laisse de côté pour l’instant)
+import { getAuth } from "firebase/auth"; // <<< AJOUT
 
 // Config Firebase de ton projet
 const firebaseConfig = {
@@ -19,3 +19,7 @@ const app = initializeApp(firebaseConfig);
 
 // Exporter Firestore pour le reste de l'app
 export const db = getFirestore(app);
+
+// Exporter Auth pour le login
+export const auth = getAuth(app);
+

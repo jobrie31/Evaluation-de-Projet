@@ -1,4 +1,6 @@
+// src/App.jsx
 import React, { useState, useEffect } from "react";
+import Login from "./Login";
 import "./App.css";
 import {
   collection,
@@ -6,6 +8,7 @@ import {
   onSnapshot,
   deleteDoc,
   doc,
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -24,6 +27,8 @@ const EMPTY_PROJECT = {
   categorie: "",
   description: "",
   superficie: "", // en pi²
+  dateSoumission: "", // "date du projet"
+  groupe: "",
 
   mouluresSoumis: "",
   mouluresPaye: "",
@@ -62,14 +67,28 @@ function getTotalPaye(project) {
   );
 }
 
-// Build résumé en $/pi²
+// Format date (string ISO ou Timestamp Firestore) -> JJ-MM-AAAA
+function formatDate(value) {
+  if (!value) return "";
+  try {
+    let d;
+    if (value.seconds) {
+      d = new Date(value.seconds * 1000);
+    } else {
+      d = new Date(value);
+    }
+    if (isNaN(d)) return value;
+    return d.toLocaleDateString("fr-CA");
+  } catch {
+    return value;
+  }
+}
+
+// Build résumé en $/pi² + TOTAL $
 function buildSummaryForList(projects, categorieLabel = null) {
   if (!projects.length) return null;
 
-  const totalArea = projects.reduce(
-    (sum, p) => sum + getSuperficie(p),
-    0
-  );
+  const totalArea = projects.reduce((sum, p) => sum + getSuperficie(p), 0);
 
   const totalSoumisMoney = projects.reduce(
     (sum, p) => sum + getTotalSoumission(p),
@@ -80,14 +99,12 @@ function buildSummaryForList(projects, categorieLabel = null) {
     0
   );
 
-  // Conversion en $/pi² si superficie > 0
-  const totalSoumis =
-    totalArea > 0 ? totalSoumisMoney / totalArea : 0;
-  const totalPaye =
-    totalArea > 0 ? totalPayeMoney / totalArea : 0;
+  const totalSoumis = totalArea > 0 ? totalSoumisMoney / totalArea : 0;
+  const totalPaye = totalArea > 0 ? totalPayeMoney / totalArea : 0;
 
-  const diff = totalSoumis - totalPaye;
+  const diff = totalSoumis - totalPaye; // $/pi²
   const pct = totalSoumis > 0 ? (diff / totalSoumis) * 100 : null;
+  const diffMoney = totalSoumisMoney - totalPayeMoney; // TOTAL $
 
   const sumFieldMoney = (field) =>
     projects.reduce((sum, p) => sum + toNumber(p[field]), 0);
@@ -123,13 +140,12 @@ function buildSummaryForList(projects, categorieLabel = null) {
     const soumisMoney = sumFieldMoney(a.soumisField);
     const payeMoney = sumFieldMoney(a.payeField);
 
-    const soumis =
-      totalArea > 0 ? soumisMoney / totalArea : 0; // $/pi²
-    const paye =
-      totalArea > 0 ? payeMoney / totalArea : 0; // $/pi²
+    const soumis = totalArea > 0 ? soumisMoney / totalArea : 0; // $/pi²
+    const paye = totalArea > 0 ? payeMoney / totalArea : 0; // $/pi²
 
     const adiff = soumis - paye; // $/pi²
     const apct = soumis > 0 ? (adiff / soumis) * 100 : null;
+    const diffMoneyArea = soumisMoney - payeMoney; // TOTAL $ pour cette catégorie
 
     return {
       id: a.id,
@@ -138,6 +154,7 @@ function buildSummaryForList(projects, categorieLabel = null) {
       paye,
       diff: adiff,
       pct: apct,
+      diffMoney: diffMoneyArea,
     };
   });
 
@@ -145,20 +162,25 @@ function buildSummaryForList(projects, categorieLabel = null) {
     categorie: categorieLabel,
     count: projects.length,
     totalArea,
-    totalSoumis, // $/pi²
-    totalPaye, // $/pi²
+    totalSoumis,
+    totalPaye,
     diff, // $/pi²
     pct,
+    diffMoney, // TOTAL $
     areaSummaries,
   };
 }
 
 function App() {
+  const [user, setUser] = useState(null);
   const [projects, setProjects] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [newProject, setNewProject] = useState(EMPTY_PROJECT);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedBracketId, setSelectedBracketId] = useState("");
+
+  const [editProject, setEditProject] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Charger les projets depuis Firestore
   useEffect(() => {
@@ -175,8 +197,17 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Tant qu'on n'est pas loggé, on montre juste le login
+  if (!user) {
+    return <Login onLoginSuccess={(u) => setUser(u)} />;
+  }
+
   const handleOpenForm = () => {
-    setNewProject(EMPTY_PROJECT);
+    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    setNewProject({
+      ...EMPTY_PROJECT,
+      dateSoumission: todayStr, // auto : date du projet = aujourd'hui
+    });
     setShowForm(true);
   };
 
@@ -196,7 +227,13 @@ function App() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const colRef = collection(db, "projets");
-    await addDoc(colRef, newProject);
+    const payload = {
+      ...newProject,
+      // sécurité : si l'utilisateur efface la date, on remet aujourd'hui
+      dateSoumission:
+        newProject.dateSoumission || new Date().toISOString().slice(0, 10),
+    };
+    await addDoc(colRef, payload);
     handleCloseForm();
   };
 
@@ -213,8 +250,44 @@ function App() {
     setSelectedBracketId("");
   };
 
-  const handleDeleteProject = async (id) => {
+  const deleteProject = async (id) => {
+    if (
+      !window.confirm(
+        "Êtes-vous sûr de vouloir supprimer ce projet ? Cette action est irréversible."
+      )
+    ) {
+      return;
+    }
     await deleteDoc(doc(db, "projets", id));
+  };
+
+  const openProjectDetails = (project) => {
+    setEditProject(project);
+    setShowEditModal(true);
+  };
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditProject(null);
+  };
+
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    setEditProject((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleUpdateProject = async (e) => {
+    e.preventDefault();
+    if (!editProject || !editProject.id) return;
+
+    const { id, ...data } = editProject;
+    const ref = doc(db, "projets", id);
+    await updateDoc(ref, data);
+
+    closeEditModal();
   };
 
   // Filtrage (par catégorie + par SUPERFICIE)
@@ -250,20 +323,16 @@ function App() {
   let categorySummaries = [];
 
   if (isNoFilter) {
-    // Aucun filtre -> résumé global de tous les projets
     globalSummary = buildSummaryForList(visibleProjects, null);
   } else if (isOnlyBracketFilter) {
-    // seulement une tranche de superficie -> 1 résumé global
     globalSummary = buildSummaryForList(visibleProjects, null);
   } else {
-    // catégorie choisie (avec ou sans tranche de superficie) -> par catégorie
     categorySummaries = CATEGORIES.map((cat) => {
       const list = visibleProjects.filter((p) => p.categorie === cat);
       return buildSummaryForList(list, cat);
     }).filter(Boolean);
   }
 
-  // Bloc "type de coût" avec histogramme vertical Soumission/Payé et gros gain/perte
   const renderArea = (a) => {
     const maxVal = Math.max(a.soumis, a.paye, 1);
     const hSoumis = Math.max((a.soumis / maxVal) * 100, 5);
@@ -281,7 +350,16 @@ function App() {
         maximumFractionDigits: 2,
       });
       const labelBase = a.pct >= 0 ? "Gain" : "Perte";
-      pctText = `${labelBase} : ${pctAbs} % (${diffAbs} $/pi²)`;
+      pctText = `${labelBase} : ${diffAbs} $/pi² (${pctAbs} %)`;
+    }
+
+    let totalMoneyText = "";
+    if (typeof a.diffMoney === "number" && !Number.isNaN(a.diffMoney)) {
+      const absMoney = Math.abs(a.diffMoney).toLocaleString("fr-CA", {
+        maximumFractionDigits: 0,
+      });
+      const labelBase = a.diffMoney >= 0 ? "Gain total" : "Perte totale";
+      totalMoneyText = `${labelBase} : ${absMoney} $`;
     }
 
     return (
@@ -291,9 +369,7 @@ function App() {
         </div>
 
         <div className="summary-area-body">
-          {/* Histogramme vertical Soumission / Payé en $/pi² */}
           <div className="summary-hist">
-            {/* Soumission */}
             <div className="summary-bar-vertical">
               <span className="summary-bar-vertical-value">
                 {a.soumis.toLocaleString("fr-CA", {
@@ -310,7 +386,6 @@ function App() {
               <span className="summary-bar-vertical-name">Soumission</span>
             </div>
 
-            {/* Payé */}
             <div className="summary-bar-vertical">
               <span className="summary-bar-vertical-value">
                 {a.paye.toLocaleString("fr-CA", {
@@ -328,16 +403,60 @@ function App() {
             </div>
           </div>
 
-          {/* Gros texte gain/perte à côté */}
-          <div className={`summary-area-gain-big ${pctClass}`}>{pctText}</div>
+          <div className={`summary-area-gain-big ${pctClass}`}>
+            <div>{pctText}</div>
+            {totalMoneyText && (
+              <div className="summary-area-total">{totalMoneyText}</div>
+            )}
+          </div>
         </div>
       </div>
     );
   };
 
+  // maintenant le résumé global / par catégorie avec TOTAL $
+  const editSummary = editProject
+    ? buildSummaryForList([editProject], editProject.categorie || null)
+    : null;
+
+  const formatDiffAndPct = (diffPerPi2, pct, diffMoney) => {
+    if (pct == null) {
+      return "—";
+    }
+    const diffStr = diffPerPi2.toLocaleString("fr-CA", {
+      maximumFractionDigits: 2,
+    });
+    const pctStr = pct.toLocaleString("fr-CA", {
+      maximumFractionDigits: 1,
+    });
+
+    let text = `${diffStr} $/pi² (${pctStr} %)`;
+
+    if (typeof diffMoney === "number" && !Number.isNaN(diffMoney)) {
+      const diffMoneyStr = diffMoney.toLocaleString("fr-CA", {
+        maximumFractionDigits: 0,
+      });
+      text += ` — Total : ${diffMoneyStr} $`;
+    }
+
+    return text;
+  };
+
   return (
     <div className="app-root">
       <header className="app-header">
+        <h1
+          style={{
+            flex: 1,
+            fontSize: "32px",
+            fontWeight: 800,
+            textAlign: "center",
+            letterSpacing: "0.05em",
+            margin: 0,
+          }}
+        >
+          ÉVALUATION DE PROJETS - STYRO
+        </h1>
         <button className="btn-primary" onClick={handleOpenForm}>
           Ajouter un nouveau projet
         </button>
@@ -396,7 +515,7 @@ function App() {
         </div>
       </section>
 
-      {/* Résumé global (aucun filtre OU seulement tranche de superficie) */}
+      {/* Résumé global */}
       {(isNoFilter || isOnlyBracketFilter) && globalSummary && (
         <section className="summary-wrapper">
           <div className="summary-card">
@@ -441,31 +560,16 @@ function App() {
                 Gain / perte moyen :{" "}
                 <strong
                   className={
-                    globalSummary.diff >= 0
+                    (globalSummary.diff ?? 0) >= 0
                       ? "summary-positive"
                       : "summary-negative"
                   }
                 >
-                  {globalSummary.diff.toLocaleString("fr-CA", {
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  $/pi²
-                </strong>
-              </span>
-              <span>
-                % gain / perte :{" "}
-                <strong
-                  className={
-                    (globalSummary.pct ?? 0) >= 0
-                      ? "summary-positive"
-                      : "summary-negative"
-                  }
-                >
-                  {globalSummary.pct === null
-                    ? "—"
-                    : `${globalSummary.pct.toLocaleString("fr-CA", {
-                        maximumFractionDigits: 1,
-                      })} %`}
+                  {formatDiffAndPct(
+                    globalSummary.diff,
+                    globalSummary.pct,
+                    globalSummary.diffMoney
+                  )}
                 </strong>
               </span>
             </div>
@@ -478,7 +582,7 @@ function App() {
         </section>
       )}
 
-      {/* Résumé par catégorie (quand une catégorie est impliquée) */}
+      {/* Résumé par catégorie */}
       {!isNoFilter && !isOnlyBracketFilter && categorySummaries.length > 0 && (
         <section className="summary-wrapper">
           {categorySummaries.map((s) => (
@@ -520,29 +624,12 @@ function App() {
                   Gain / perte moyen :{" "}
                   <strong
                     className={
-                      s.diff >= 0 ? "summary-positive" : "summary-negative"
-                    }
-                  >
-                    {s.diff.toLocaleString("fr-CA", {
-                      maximumFractionDigits: 2,
-                    })}{" "}
-                    $/pi²
-                  </strong>
-                </span>
-                <span>
-                  % gain / perte :{" "}
-                  <strong
-                    className={
-                      (s.pct ?? 0) >= 0
+                      (s.diff ?? 0) >= 0
                         ? "summary-positive"
                         : "summary-negative"
                     }
                   >
-                    {s.pct === null
-                      ? "—"
-                      : `${s.pct.toLocaleString("fr-CA", {
-                          maximumFractionDigits: 1,
-                        })} %`}
+                    {formatDiffAndPct(s.diff, s.pct, s.diffMoney)}
                   </strong>
                 </span>
               </div>
@@ -606,6 +693,16 @@ function App() {
                     min="0"
                     step="1"
                     required
+                  />
+                </label>
+
+                <label>
+                  Date du projet
+                  <input
+                    type="date"
+                    name="dateSoumission"
+                    value={newProject.dateSoumission}
+                    onChange={handleChange}
                   />
                 </label>
 
@@ -715,7 +812,258 @@ function App() {
         </div>
       )}
 
-      {/* Liste des projets */}
+      {/* MODALE ÉDITION PROJET */}
+      {showEditModal && editProject && (
+        <div className="modal-overlay project-modal-overlay">
+          <div className="modal project-modal">
+            <div className="project-modal-header">
+              <h2>
+                Détails du projet —{" "}
+                <span>{editProject.nomProjet || "Sans nom"}</span>
+              </h2>
+              <button className="close-top-right" onClick={closeEditModal}>
+                Fermer
+              </button>
+            </div>
+
+            {editSummary && (
+              <div className="project-modal-summary">
+                <div className="summary-mainline project-modal-mainline">
+                  <span>
+                    Superficie :{" "}
+                    <strong>
+                      {editSummary.totalArea.toLocaleString("fr-CA", {
+                        maximumFractionDigits: 0,
+                      })}{" "}
+                      pi²
+                    </strong>
+                  </span>
+                  <span>
+                    Soumission moyenne :{" "}
+                    <strong>
+                      {editSummary.totalSoumis.toLocaleString("fr-CA", {
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      $/pi²
+                    </strong>
+                  </span>
+                  <span>
+                    Payé moyen :{" "}
+                    <strong>
+                      {editSummary.totalPaye.toLocaleString("fr-CA", {
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      $/pi²
+                    </strong>
+                  </span>
+                  <span>
+                    Gain / perte moyen :{" "}
+                    <strong
+                      className={
+                        (editSummary.diff ?? 0) >= 0
+                          ? "summary-positive"
+                          : "summary-negative"
+                      }
+                    >
+                      {formatDiffAndPct(
+                        editSummary.diff,
+                        editSummary.pct,
+                        editSummary.diffMoney
+                      )}
+                    </strong>
+                  </span>
+                </div>
+
+                <div className="summary-subtitle">
+                  Par type de coût (en $/pi²)
+                </div>
+                <div className="summary-subgrid project-modal-subgrid">
+                  {editSummary.areaSummaries.map((a) => renderArea(a))}
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateProject} className="project-form">
+              <div className="form-section">
+                <h3>Informations générales</h3>
+
+                <label>
+                  Nom du projet
+                  <input
+                    type="text"
+                    name="nomProjet"
+                    value={editProject.nomProjet || ""}
+                    onChange={handleEditChange}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Catégorie
+                  <select
+                    name="categorie"
+                    value={editProject.categorie || ""}
+                    onChange={handleEditChange}
+                    required
+                  >
+                    <option value="">Sélectionner...</option>
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Superficie (pi²)
+                  <input
+                    type="number"
+                    name="superficie"
+                    value={editProject.superficie || ""}
+                    onChange={handleEditChange}
+                    min="0"
+                    step="1"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Date du projet
+                  <input
+                    type="date"
+                    name="dateSoumission"
+                    value={editProject.dateSoumission || ""}
+                    onChange={handleEditChange}
+                  />
+                </label>
+
+                <label>
+                  Groupe
+                  <input
+                    type="text"
+                    name="groupe"
+                    value={editProject.groupe || ""}
+                    onChange={handleEditChange}
+                    placeholder="Groupe / client / équipe"
+                  />
+                </label>
+
+                <label>
+                  Notes / Description
+                  <textarea
+                    name="description"
+                    value={editProject.description || ""}
+                    onChange={handleEditChange}
+                    rows={3}
+                  />
+                </label>
+              </div>
+
+              <div className="form-section">
+                <h3>Budget total par catégorie (en $)</h3>
+
+                <div className="price-grid">
+                  <div className="price-grid-header" />
+                  <div className="price-grid-header">Soumission</div>
+                  <div className="price-grid-header">Payé</div>
+
+                  <div className="price-grid-label">Moulures</div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="mouluresSoumis"
+                    value={editProject.mouluresSoumis || ""}
+                    onChange={handleEditChange}
+                    placeholder="0.00"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="mouluresPaye"
+                    value={editProject.mouluresPaye || ""}
+                    onChange={handleEditChange}
+                    placeholder="0.00"
+                  />
+
+                  <div className="price-grid-label">Quincailleries</div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="quincailleriesSoumis"
+                    value={editProject.quincailleriesSoumis || ""}
+                    onChange={handleEditChange}
+                    placeholder="0.00"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="quincailleriesPaye"
+                    value={editProject.quincailleriesPaye || ""}
+                    onChange={handleEditChange}
+                    placeholder="0.00"
+                  />
+
+                  <div className="price-grid-label">Installation</div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="installationSoumis"
+                    value={editProject.installationSoumis || ""}
+                    onChange={handleEditChange}
+                    placeholder="0.00"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="installationPaye"
+                    value={editProject.installationPaye || ""}
+                    onChange={handleEditChange}
+                    placeholder="0.00"
+                  />
+
+                  <div className="price-grid-label">Équipement</div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="equipementSoumis"
+                    value={editProject.equipementSoumis || ""}
+                    onChange={handleEditChange}
+                    placeholder="0.00"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="equipementPaye"
+                    value={editProject.equipementPaye || ""}
+                    onChange={handleEditChange}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="form-actions project-modal-actions">
+                <button
+                  type="button"
+                  className="delete-btn"
+                  onClick={async () => {
+                    if (!editProject?.id) return;
+                    await deleteProject(editProject.id);
+                    closeEditModal();
+                  }}
+                >
+                  Supprimer le projet
+                </button>
+                <button type="submit" className="btn-primary">
+                  Enregistrer les modifications
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Liste des projets (tableau en bas des résumés) */}
       <main className="project-list">
         {visibleProjects.length === 0 ? (
           <p>Aucun projet pour l’instant.</p>
@@ -724,49 +1072,65 @@ function App() {
             {visibleProjects.map((p) => {
               const totalSoumis = getTotalSoumission(p);
               const superficie = getSuperficie(p);
-              const totalParPi2 =
-                superficie > 0 ? totalSoumis / superficie : 0;
+              const totalParPi2 = superficie > 0 ? totalSoumis / superficie : 0;
 
               return (
-                <li key={p.id}>
-                  <div className="project-main">
-                    <div>
-                      <strong>{p.nomProjet || "Sans nom"}</strong>
-                      {p.description && (
-                        <span className="project-description">
-                          {" "}
-                          — {p.description}
+                <li
+                  key={p.id}
+                  className="project-item"
+                  onClick={() => openProjectDetails(p)}
+                >
+                  <div className="project-item-row">
+                    {/* Gauche : titre + infos */}
+                    <div className="project-main">
+                      {/* Ligne 1 : titre + superficie + date + total soumis */}
+                      <div className="project-header-line">
+                        <span className="project-title">
+                          {p.nomProjet || "Sans nom"}
                         </span>
+
+                        <span className="project-inline-info">
+                          Superficie:{" "}
+                          <strong>
+                            {superficie.toLocaleString("fr-CA", {
+                              maximumFractionDigits: 0,
+                            })}{" "}
+                            pi²
+                          </strong>
+                        </span>
+
+                        {p.dateSoumission && (
+                          <span className="project-inline-info">
+                            Date du projet:{" "}
+                            <strong>{formatDate(p.dateSoumission)}</strong>
+                          </span>
+                        )}
+
+                        <span className="project-inline-info">
+                          Total soumis:{" "}
+                          <strong>
+                            {totalParPi2.toLocaleString("fr-CA", {
+                              maximumFractionDigits: 2,
+                            })}{" "}
+                            $/pi²
+                          </strong>
+                        </span>
+                      </div>
+
+                      {/* Description en dessous si présente */}
+                      {p.description && (
+                        <div className="project-description">
+                          {p.description}
+                        </div>
                       )}
                     </div>
+
+                    {/* Droite : catégorie en gros */}
                     {p.categorie && (
-                      <span className="project-category-tag">
+                      <div className="project-category-big">
                         {p.categorie}
-                      </span>
+                      </div>
                     )}
-                  </div>
-                  <div className="project-sub">
-                    <span>
-                      Superficie :{" "}
-                      {superficie.toLocaleString("fr-CA", {
-                        maximumFractionDigits: 0,
-                      })}{" "}
-                      pi²
-                    </span>
-                    <span>
-                      Total soumis :{" "}
-                      {totalParPi2.toLocaleString("fr-CA", {
-                        maximumFractionDigits: 2,
-                      })}{" "}
-                      $/pi²
-                    </span>
-                    <button
-                      type="button"
-                      className="delete-btn"
-                      onClick={() => handleDeleteProject(p.id)}
-                    >
-                      Supprimer
-                    </button>
                   </div>
                 </li>
               );

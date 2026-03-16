@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "evaluation-de-projet"
-  }
+  },
+  "targets": {
+    "planification-styro": {
+      "hosting": {
+        "evaluation": [
+          "evaluation-projets"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

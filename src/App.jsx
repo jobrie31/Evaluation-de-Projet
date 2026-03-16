@@ -40,6 +40,9 @@ const EMPTY_PROJECT = {
   equipementPaye: "",
 };
 
+// ✅ Nouveau chemin Firestore dans planification-styro
+const EVAL_PROJECTS_PATH = ["clients", "evaluation-projets-styro", "projets"];
+
 function toNumber(v) {
   const n = parseFloat(v);
   return isNaN(n) ? 0 : n;
@@ -184,7 +187,7 @@ function App() {
 
   // Charger les projets depuis Firestore
   useEffect(() => {
-    const colRef = collection(db, "projets");
+    const colRef = collection(db, ...EVAL_PROJECTS_PATH);
 
     const unsubscribe = onSnapshot(colRef, (snapshot) => {
       const data = snapshot.docs.map((d) => ({
@@ -226,7 +229,7 @@ function App() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const colRef = collection(db, "projets");
+    const colRef = collection(db, ...EVAL_PROJECTS_PATH);
     const payload = {
       ...newProject,
       // sécurité : si l'utilisateur efface la date, on remet aujourd'hui
@@ -258,7 +261,7 @@ function App() {
     ) {
       return;
     }
-    await deleteDoc(doc(db, "projets", id));
+    await deleteDoc(doc(db, ...EVAL_PROJECTS_PATH, id));
   };
 
   const openProjectDetails = (project) => {
@@ -284,7 +287,7 @@ function App() {
     if (!editProject || !editProject.id) return;
 
     const { id, ...data } = editProject;
-    const ref = doc(db, "projets", id);
+    const ref = doc(db, ...EVAL_PROJECTS_PATH, id);
     await updateDoc(ref, data);
 
     closeEditModal();

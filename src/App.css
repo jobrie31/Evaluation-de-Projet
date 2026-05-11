@@ -1,15 +1,37 @@
-/* ================== RESET & LAYOUT ================== */
+/* src/App.css */
+
+/* ================== RESET GLOBAL ================== */
 
 * {
   box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
   margin: 0;
-  padding: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
 }
 
 body {
   background-color: #f3f4f6;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #111827;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* ================== SHELL GLOBAL ================== */
+
+.app-shell {
+  min-height: 100vh;
+  background: #f3f4f6;
 }
 
 .app-root {
@@ -17,7 +39,7 @@ body {
   padding: 24px;
 }
 
-/* ================== BOUTONS ================== */
+/* ================== BOUTONS GLOBAUX ================== */
 
 button {
   cursor: pointer;
@@ -27,7 +49,6 @@ button {
   font-size: 14px;
 }
 
-/* PRINCIPAL BLEU */
 .btn-primary {
   background-color: #2563eb;
   color: #ffffff;
@@ -44,18 +65,16 @@ button {
   cursor: not-allowed;
 }
 
-/* Autres boutons dans les forms = gris, mais PAS les .btn-primary */
-.form-actions button:not(.btn-primary),
-.project-modal-actions button:not(.btn-primary) {
+.btn-secondary {
   background: #e5e7eb;
+  color: #111827;
+  font-weight: 500;
 }
 
-.form-actions button:not(.btn-primary):hover,
-.project-modal-actions button:not(.btn-primary):hover {
+.btn-secondary:hover {
   background: #d1d5db;
 }
 
-/* Bouton delete */
 .delete-btn {
   background: #fee2e2;
   color: #b91c1c;
@@ -64,561 +83,8 @@ button {
   font-size: 11px;
 }
 
-/* ================== HEADER ================== */
-
-.app-header {
-  display: flex;
-  justify-content: flex-start;
-  margin-bottom: 24px;
-}
-
-/* ================== CATÉGORIES & BRACKETS ================== */
-
-.category-buttons,
-.bracket-buttons {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.category-button,
-.bracket-button {
-  padding: 20px 16px;
-  font-size: 18px;
-  font-weight: 600;
-  border-radius: 12px;
-  background: #e5e7eb;
-  color: #111827;
-  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
-  transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s;
-}
-
-.category-button:hover,
-.bracket-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
-}
-
-.category-button-active {
-  background: #2563eb;
-  color: #f9fafb;
-}
-
-.bracket-button.bracket-button-active {
-  background: #f97316; /* orange */
-  color: #f9fafb;
-}
-
-/* ================== FILTRES ================== */
-
-.filters-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.filter-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  font-size: 13px;
-  color: #4b5563;
-}
-
-.filter-summary strong {
-  color: #111827;
-}
-
-.filter-clear-btn {
-  margin-left: auto;
-  background: #fee2e2;
-  color: #b91c1c;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
-}
-
-/* ================== MODALES GÉNÉRIQUES ================== */
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-}
-
-.modal {
-  background: white;
-  border-radius: 10px;
-  padding: 20px 24px;
-  width: 100%;
-  max-width: 720px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
-}
-
-.modal h2 {
-  font-size: 20px;
-  margin-bottom: 16px;
-}
-
-/* ================== FORMULAIRES ================== */
-
-.project-form {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.form-section {
-  background: #f9fafb;
-  border-radius: 8px;
-  padding: 12px 14px;
-  border: 1px solid #e5e7eb;
-}
-
-.form-section h3 {
-  font-size: 16px;
-  margin-bottom: 10px;
-  color: #111827;
-}
-
-.form-section label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: #374151;
-  margin-bottom: 10px;
-}
-
-input,
-select,
-textarea {
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
-  padding: 6px 8px;
-  font-size: 13px;
-  background: white;
-}
-
-input:focus,
-select:focus,
-textarea:focus {
-  outline: 2px solid #2563eb;
-  outline-offset: 1px;
-  border-color: #2563eb;
-}
-
-/* enlever les flèches sur les input type="number" */
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-input[type="number"] {
-  -moz-appearance: textfield;
-}
-
-/* Grille des prix */
-
-.price-grid {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr;
-  gap: 6px;
-  font-size: 13px;
-  align-items: center;
-}
-
-.price-grid-header {
-  font-weight: 600;
-  text-align: left;
-  padding-bottom: 4px;
-}
-
-.price-grid-label {
-  font-weight: 500;
-}
-
-/* Actions formulaire (les gris sont gérés plus haut) */
-
-.form-actions,
-.project-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-/* Barre d’actions collée en bas dans la modale projet */
-.project-modal-actions {
-  position: sticky;
-  bottom: 0;
-  background: #ffffff;
-  padding-top: 10px;
-  margin-top: 16px;
-}
-
-/* ================== RÉSUMÉS GAINS / PERTES ================== */
-
-.summary-wrapper {
-  margin-bottom: 20px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.summary-card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 20px 24px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
-  flex: 1 1 100%;
-}
-
-.summary-title {
-  font-weight: 700;
-  margin-bottom: 12px;
-  font-size: 26px;
-  color: #111827;
-}
-
-.summary-mainline {
-  display: flex;
-  flex-wrap: wrap;
-  column-gap: 18px;
-  row-gap: 4px;
-  font-size: 14px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #f9fafb;
-  margin-bottom: 10px;
-}
-
-.summary-mainline span {
-  white-space: nowrap;
-}
-
-.summary-mainline span:last-child {
-  font-size: 15px;
-}
-
-.summary-mainline span:last-child strong {
-  font-size: 22px;
-}
-
-.summary-subtitle {
-  margin-top: 4px;
-  font-weight: 600;
-  font-size: 12px;
-  color: #4b5563;
-}
-
-.summary-subgrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px;
-  margin-top: 6px;
-}
-
-.summary-area {
-  background: #f9fafb;
-  border-radius: 12px;
-  padding: 8px 10px;
-}
-
-.summary-area-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 4px;
-}
-
-.summary-area-title {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.summary-positive {
-  color: #15803d;
-}
-
-.summary-negative {
-  color: #b91c1c;
-}
-
-/* Histogrammes verticaux */
-
-.summary-area-body {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.summary-hist {
-  display: flex;
-  align-items: flex-end;
-  gap: 16px;
-  margin: 6px 0 8px;
-  min-height: 80px;
-}
-
-.summary-bar-vertical {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-}
-
-.summary-bar-vertical-value {
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.summary-bar-vertical-track {
-  position: relative;
-  width: 22px;
-  height: 70px;
-  border-radius: 999px;
-  background: #e5e7eb;
-  overflow: hidden;
-  display: flex;
-  align-items: flex-end;
-}
-
-.summary-bar-vertical-fill {
-  width: 100%;
-  border-radius: 999px 999px 0 0;
-}
-
-.summary-bar-soumis {
-  background: #60a5fa;
-}
-
-.summary-bar-paye {
-  background: #9ca3af;
-}
-
-.summary-bar-vertical-name {
-  margin-top: 2px;
-  font-size: 11px;
-  color: #4b5563;
-}
-
-.summary-area-gain-big {
-  font-size: 16px;
-  font-weight: 700;
-  text-align: right;
-  white-space: nowrap;
-}
-
-/* ================== MODALE PROJET (DÉTAILS) ================== */
-
-.project-modal-overlay {
-  /* même overlay que modal-overlay */
-}
-
-.project-modal {
-  background: #ffffff;
-  border-radius: 18px;
-  padding: 20px 24px;
-  max-width: 1200px;
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.3fr); /* gauche/droite */
-  grid-auto-rows: auto;
-  gap: 16px 28px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
-  align-items: flex-start;
-}
-
-.project-modal-header {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.project-modal-header h2 {
-  font-size: 24px;
-  font-weight: 700;
-  color: #111827;
-}
-
-.project-modal-header h2 span {
-  color: #1d4ed8;
-}
-
-.project-modal-header-line {
-  margin-top: 0.4rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  font-size: 0.9rem;
-}
-
-.project-category-tag,
-.project-group-tag,
-.project-date-tag {
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  background-color: #f3f4f6;
-}
-
-/* Résumé à gauche */
-.project-modal-summary {
-  grid-column: 1 / 2;
-  background: #f9fafb;
-  border-radius: 14px;
-  padding: 12px 14px;
-  border: 1px solid #e5e7eb;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  height: 100%;
-}
-
-.project-modal-mainline {
-  font-size: 13px;
-}
-
-.project-modal-subgrid {
-  margin-top: 4px;
-}
-
-/* Formulaire à droite */
-.project-modal .project-form {
-  grid-column: 2 / 3;
-  gap: 16px;
-}
-
-.project-modal .form-section {
-  padding: 10px 12px;
-}
-
-.project-modal .price-grid {
-  gap: 4px;
-  font-size: 12px;
-}
-
-.project-modal-summary .summary-area-body {
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: 6px;
-}
-
-.project-modal-summary .summary-area-gain-big {
-  text-align: left;
-  white-space: normal;
-  font-size: 14px;
-  line-height: 1.3;
-}
-
-.project-modal-summary .summary-subgrid {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px;
-}
-
-/* Bouton "Fermer" en haut à droite */
-.close-top-right {
-  background: transparent;
-  color: #111827;
-  font-size: 14px;
-  padding: 6px 10px;
-}
-
-/* ================== LISTE DES PROJETS (BAS) ================== */
-
-.project-list {
-  margin-top: 8px;
-  font-size: 14px;
-}
-
-.project-list p {
-  color: #6b7280;
-}
-
-.project-list ul {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Case projet : ligne peu épaisse */
-.project-item {
-  padding: 0.4rem 0.8rem;
-  border-bottom: 1px solid #e5e7eb;
-  background: white;
-  cursor: pointer;
-}
-
-.project-item:hover {
-  background: #f9fafb;
-}
-
-/* Ligne principale : gauche (infos) + droite (catégorie) */
-.project-item-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-/* Bloc gauche */
-.project-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-/* Ligne 1 : titre + infos */
-.project-header-line {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-/* Titre bien gros */
-.project-title {
-  font-size: 1.3rem;
-  font-weight: 700;
-}
-
-/* Infos (superficie, total, date) alignées avec le titre */
-.project-inline-info {
-  font-size: 1.05rem;
-}
-
-/* Description */
-.project-description {
-  font-size: 0.9rem;
-  color: #4b5563;
-  margin-top: 0.15rem;
-}
-
-/* Catégorie en GROS à droite */
-.project-category-big {
-  font-size: 1.6rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  white-space: nowrap;
-  align-self: center;
-  color: #111827;
+.delete-btn:hover {
+  background: #fecaca;
 }
 
 /* ================== LOGIN ================== */
@@ -629,6 +95,7 @@ input[type="number"] {
   align-items: center;
   justify-content: center;
   background: #e5e7eb;
+  padding: 20px;
 }
 
 .login-card {
@@ -696,4 +163,12 @@ input[type="number"] {
   margin-top: 4px;
   font-size: 15px;
   padding: 9px 12px;
+}
+
+/* ================== RESPONSIVE GLOBAL ================== */
+
+@media (max-width: 768px) {
+  .app-root {
+    padding: 14px;
+  }
 }

@@ -1,12 +1,12 @@
 {
   "projects": {
-    "default": "evaluation-de-projet"
+    "default": "planification-styro"
   },
   "targets": {
     "planification-styro": {
       "hosting": {
         "evaluation": [
-          "evaluation-projets"
+          "evaluation-projets-styro"
         ]
       }
     }
